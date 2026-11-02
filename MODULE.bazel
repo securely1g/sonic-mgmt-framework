@@ -1,0 +1,130 @@
+module(
+    name = "sonic-mgmt-framework",
+    version = "1.0.0",
+    bazel_compatibility = [
+        ">=8.5.1",
+        "<=8.5.1",
+    ],
+)
+
+bazel_dep(name = "sonic-mgmt-common", version = "1.0.0-af147e78654ad423ea0a2af268dfd0b71092b38b", repo_name = "sonic_mgmt_common")
+bazel_dep(name = "gazelle", version = "0.54.0")
+bazel_dep(name = "rules_go", version = "0.64.1-sonic.1", repo_name = "io_bazel_rules_go")
+bazel_dep(name = "sonic-build-infra", version = "0.0.25-17a1e555291c64be1a6ff008f33352bffc4f8e5c", repo_name = "sonic_build_infra")
+
+single_version_override(
+    module_name = "rules_go",
+    version = "0.64.1-sonic.1",
+)
+
+single_version_override(
+    module_name = "tar.bzl",
+    version = "0.10.5-sonic.1",
+)
+
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_work = "//:go.bazel.work")
+
+# Root-only patch selection, matching the management-common owner.
+go_patches = use_extension("@gazelle//:extensions.bzl", "go_deps", dev_dependency = True)
+
+# The consuming root selects the owner's existing SONiC Go patches. Public
+# libraries and their consumers share one Go graph and the same Go types.
+go_patches.gazelle_override(
+    directives = ["gazelle:proto disable_global"],
+    path = "github.com/openconfig/gnmi",
+)
+
+# These are the existing Make/vendor patches, applied to isolated dependency
+# repositories. Build actions never modify go.mod, vendor, or the checkout.
+go_patches.module_override(
+    patch_strip = 1,
+    patches = [
+        "@sonic_mgmt_common//patches:ygot/ygot.patch",
+        "@sonic_mgmt_common//patches:0001-ygot-declare-patched-value-dependency.patch",
+        "@sonic_mgmt_common//patches:0003-ygot-preserve-union-enum-order.patch",
+    ],
+    path = "github.com/openconfig/ygot",
+)
+go_patches.module_override(
+    patch_strip = 1,
+    patches = [
+        "@sonic_mgmt_common//patches:goyang/goyang.patch",
+        "@sonic_mgmt_common//patches:0002-goyang-preserve-declared-schema-order.patch",
+    ],
+    path = "github.com/openconfig/goyang",
+)
+go_patches.module_override(
+    patch_strip = 1,
+    patches = ["@sonic_mgmt_common//patches:jsonquery.patch"],
+    path = "github.com/antchfx/jsonquery",
+)
+go_patches.module_override(
+    patch_strip = 1,
+    patches = ["@sonic_mgmt_common//patches:xmlquery.patch"],
+    path = "github.com/antchfx/xmlquery",
+)
+go_patches.module_override(
+    patch_strip = 1,
+    patches = ["@sonic_mgmt_common//patches:xpath.patch"],
+    path = "github.com/antchfx/xpath",
+)
+go_patches.module_override(
+    patch_strip = 1,
+    patches = ["@sonic_mgmt_common//patches:glog.patch"],
+    path = "github.com/golang/glog",
+)
+
+# Match the owner generators and source toolchain in this consuming root.
+bazel_dep(name = "rules_python", version = "1.9.0")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = "3.13",
+)
+
+go_sdk = use_extension("@io_bazel_rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(version = "1.25.9")
+
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_foreign_cc", version = "0.16.0")
+bazel_dep(name = "rules_distroless", version = "0.9.4.sonic.13")
+bazel_dep(name = "tar.bzl", version = "0.10.5-sonic.1")
+
+gcc = use_extension("@sonic_build_infra//toolchains/gcc:extensions.bzl", "gcc")
+use_repo(gcc, "gcc_toolchains")
+
+register_toolchains("@gcc_toolchains//:all")
+
+use_repo(go_deps, "com_github_golang_glog", "com_github_gorilla_mux", "com_github_pkg_profile", "in_gopkg_go_playground_validator_v9", "org_golang_x_crypto")
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "framework_pip",
+    python_version = "3.13",
+    requirements_lock = "//:requirements_lock.txt",
+)
+use_repo(pip, "framework_pip")
+
+tar_toolchains = use_extension("@tar.bzl//tar:extensions.bzl", "toolchains")
+use_repo(tar_toolchains, "bsd_tar_toolchains")
+
+register_toolchains("@bsd_tar_toolchains//:all")
+
+bazel_dep(name = "rules_pkg", version = "1.1.0")
+
+apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
+apt.import_lock(lock = "//CLI/bazel:apt.lock.json")
+use_repo(apt, "framework_cli_target_debian")
+
+bazel_dep(name = "rules_cc", version = "0.2.18")
+
+# Temporary immutable selection for the shared CLI execution-tool extension.
+archive_override(
+    module_name = "sonic-build-infra",
+    integrity = "sha256-U6b0szFANCQXXbl3MmLYjjn8YVze4e8AJ3a5iJS4OSg=",
+    strip_prefix = "sonic-build-infra-f2015163598aee7e8e3df7ee1b2a13969a353236",
+    urls = ["https://github.com/securely1g/sonic-build-infra/archive/f2015163598aee7e8e3df7ee1b2a13969a353236.tar.gz"],
+)
