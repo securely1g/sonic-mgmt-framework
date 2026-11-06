@@ -24,25 +24,19 @@ build-tools runtime; the component lock contains target libraries only.
 
 ## Review dependencies
 
-This work currently consumes unmerged [management-common registration #165](https://github.com/securely1g/sonic-bazel-registry/pull/165)
-and [shared CLI execution tools #72](https://github.com/securely1g/sonic-build-infra/pull/72).
-Normal `.bazelrc` selects registry main. Draft CI replaces that catalog with
-reviewed commit `8afeb55fde7c6df392a85ba32a6cdaa8547788ab`; `MODULE.bazel` temporarily
-pins the exact infra source archive. Remove the temporary selections and rerun
-validation when those dependencies land.
-
-To reproduce the reviewed catalog selection locally:
+Management Common `1.0.1-05f83dcab8fe2e1a0e0fc37ac172b289d6968e2b` and the
+public goyang/ygot owners are available in the maintained SONiC registry after
+[Management Common #3](https://github.com/securely1g/sonic-mgmt-common/pull/3),
+[registry #214](https://github.com/securely1g/sonic-bazel-registry/pull/214) and
+[registry #216](https://github.com/securely1g/sonic-bazel-registry/pull/216).
+Source CI and the separate consumer use registry main without a temporary
+catalog substitution. The existing immutable archive selection for
+[shared CLI execution tools #72](https://github.com/securely1g/sonic-build-infra/pull/72)
+remains a separate review dependency; this Management Common adoption does not
+change those execution tools.
 
 ```sh
-python3 - <<'PY'
-from pathlib import Path
-source = Path('.bazelrc').read_text().replace(
-    'https://raw.githubusercontent.com/securely1g/sonic-bazel-registry/main',
-    'https://raw.githubusercontent.com/securely1g/sonic-bazel-registry/8afeb55fde7c6df392a85ba32a6cdaa8547788ab')
-Path('/tmp/framework-review.bazelrc').write_text(source)
-PY
-bazel --noworkspace_rc --bazelrc=/tmp/framework-review.bazelrc build \
-  //dist:runtime //dist:runtime.debug_symbols
+bazel build //dist:runtime //dist:runtime.debug_symbols
 ```
 
 `MODULE.bazel.lock` is generated and ignored; CI retains it as evidence. Package
@@ -52,8 +46,9 @@ module directly, preserving the legacy neighboring-checkout `go.mod` declaration
 from the native `go.mod`; Bazel build-tool requirements must not silently upgrade
 the REST runtime. Downstream roots load this exported work file, as shown in
 `tools/bazel/consumer/MODULE.bazel`. The native `go.mod` and `go.sum` are unchanged.
-Go dependency patches are root-only settings, and consuming roots select the
-owner-exported patches explicitly. The certificate generator reads its source
+The public goyang/ygot modules own their shared Go types. Remaining Go dependency
+patches are root-only settings, and consuming roots select the owner-exported
+patches explicitly. The certificate generator reads its source
 from the selected public Go toolchain provider, without assuming an SDK repository
 name that only works in this checkout.
 

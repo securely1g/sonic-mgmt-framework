@@ -35,13 +35,11 @@ jobs:
           repository-cache: true
           disk-cache: management-framework-amd64
           cache-version: "8.5.1"
-      - name: Select the reviewed management-common registration
+      - name: Use the maintained registry and preserve cache settings
         run: |
           python3 - <<'PYCODE'
           from pathlib import Path
-          source = Path('.bazelrc').read_text().replace(
-              'https://raw.githubusercontent.com/securely1g/sonic-bazel-registry/main',
-              'https://raw.githubusercontent.com/securely1g/sonic-bazel-registry/8afeb55fde7c6df392a85ba32a6cdaa8547788ab')
+          source = Path('.bazelrc').read_text()
           cache_lines = [line for line in (Path.home() / '.bazelrc').read_text().splitlines()
                          if line.startswith(('build --disk_cache=', 'common --repository_cache='))]
           assert len(cache_lines) == 2
