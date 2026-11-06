@@ -1,0 +1,35 @@
+module(name = "framework_cli_lock")
+
+bazel_dep(name = "rules_distroless", version = "0.9.4.sonic.13")
+
+apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
+apt.sources_list(
+    architectures = ["amd64"],
+    components = ["main"],
+    suites = [
+        "trixie",
+        "trixie-updates",
+    ],
+    uris = ["https://snapshot.debian.org/archive/debian/20260727T143429Z"],
+)
+apt.sources_list(
+    architectures = ["amd64"],
+    components = ["main"],
+    suites = ["trixie-security"],
+    uris = ["https://snapshot.debian.org/archive/debian-security/20260726T121236Z"],
+)
+apt.install(
+    dependency_set = "framework_cli_target_debian",
+    packages = [
+        "libcjson-dev:amd64",
+        "libcurl4-openssl-dev:amd64",
+        "libpython3.13-dev:amd64",
+        "libxml2-dev:amd64",
+    ],
+    suites = [
+        "trixie",
+        "trixie-updates",
+        "trixie-security",
+    ],
+)
+use_repo(apt, "framework_cli_target_debian")

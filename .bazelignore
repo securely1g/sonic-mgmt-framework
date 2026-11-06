@@ -1,0 +1,4 @@
+build
+vendor
+CLI/bazel/refresh
+tools/bazel/consumer
