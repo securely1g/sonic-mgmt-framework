@@ -1,9 +1,0 @@
-filegroup(
-    name = "resolve",
-    srcs = [
-        "@framework_cli_target_debian//libcjson-dev",
-        "@framework_cli_target_debian//libcurl4-openssl-dev",
-        "@framework_cli_target_debian//libpython3.13-dev",
-        "@framework_cli_target_debian//libxml2-dev",
-    ],
-)

@@ -25,23 +25,18 @@ and the macro inputs and completion marker currently retained by Make. Existing
 script executable bits are preserved. Runtime TAR timestamps are fixed, and
 compiler prefix maps remove action-directory paths from debugging information.
 
-`apt.lock.json` records external target SDK/runtime libraries: libxml2, libcurl,
-Python 3.13 embedding and cJSON development inputs. GNU patch, xmllint and
-xsltproc come from the shared `sonic-build-infra` foreign runtime, selected in
-execution configuration. There is no component execution-tool package set.
-These are imported existing packages; SONiC CLI sources are compiled by their owner. The isolated build-input tree relocates absolute Debian aliases
-inside itself and fixes its build-only timezone to UTC. It is not a deployable
-root filesystem or a replacement for package installation semantics.
+The CLI selects libxml2, libcurl, Python 3.13 embedding and cJSON development
+inputs from the published build-infra APT set `framework_cli_target_debian`.
+Its shared foreign runtime supplies GNU patch, xmllint and xsltproc for the
+generators in the execution configuration. The isolated build-input tree
+relocates Debian aliases inside the tree and uses UTC during the build.
 
 The CLI's runtime Python imports use the root `framework_pip` lock (requests,
 six, natsort and Jinja2); lxml is a generator dependency. A containing image must
 supply those runtime Python packages and the native external library closure.
 
-To refresh only the reviewed external package lock, run `bazel build //:resolve`
-from `CLI/bazel/refresh`, using the same approved SONiC registry as the consuming
-root, then run `python3 export_lock.py`. The resolver uses fixed Debian and
-security snapshot timestamps and the parent's trixie/trixie-updates/security
-suite selection. Review the resulting versions and digests before committing.
+To update CLI system packages, update the Framework set in the build-infra APT
+lock and select its published module in both the source and consumer roots.
 
 The original `//CLI:cli_client_test` remains intact. The generator-order
 regression verifies that a view shared by two XML files receives its default

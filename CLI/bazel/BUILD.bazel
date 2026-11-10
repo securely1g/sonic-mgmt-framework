@@ -4,7 +4,6 @@ load(":defs.bzl", "cli_unpack")
 package(default_visibility = ["//CLI:__pkg__"])
 
 exports_files([
-    "apt.lock.json",
     "configure.sh",
     "generator_order_test.py",
     "installed_probe.py",
