@@ -30,11 +30,8 @@ def main():
     workspace.mkdir(exist_ok=True)
     shutil.copytree(ROOT / "tools/bazel/consumer", workspace, dirs_exist_ok=True)
     shutil.copyfile(ROOT / ".bazelversion", workspace / ".bazelversion")
-    infra = output_base / "external/sonic-build-infra+"
-    assert (infra / "MODULE.bazel").is_file()
     prefix = [*BAZEL, "--output_base=" + str(consumer_base)]
-    flags = ["--override_module=sonic-mgmt-framework=" + str(ROOT),
-             "--override_module=sonic-build-infra=" + str(infra)]
+    flags = ["--override_module=sonic-mgmt-framework=" + str(ROOT)]
     # A consumer's stripping policy must not empty the public debug TAR.
     profile = [*flags, "--compilation_mode=fastbuild", "--strip=always"]
 
@@ -76,8 +73,13 @@ def main():
     def version_query(command, subcommand, *arguments):
         return query(command, subcommand, *flags, *arguments)
     versions = verify_go_versions(version_query, ROOT / "go.mod", OUT / "go-runtime-versions.json")
+    # Each root resolves infra through the registry. Record the consumer copy
+    # and verify it matches the module materialized by the source build.
+    infra_module = Path("external/sonic-build-infra+/MODULE.bazel")
+    consumer_infra = (consumer_base / infra_module).read_bytes()
+    assert consumer_infra == (output_base / infra_module).read_bytes(), "source and consumer selected different infra modules"
     evidence = {"complete": True, "bazel_release": release, "consumer_compilation_mode": "fastbuild", "consumer_strip": "always", "source_checkout": str(ROOT), "source_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
-                "infra_module_sha256": hashlib.sha256((infra / "MODULE.bazel").read_bytes()).hexdigest(),
+                "infra_module_sha256": hashlib.sha256(consumer_infra).hexdigest(),
                 "tests": reports, "artifacts": artifacts, "go_runtime_versions": versions}
     (OUT / "validation.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print(json.dumps(evidence, indent=2))

@@ -29,11 +29,9 @@ public goyang/ygot owners are available in the maintained SONiC registry after
 [Management Common #3](https://github.com/securely1g/sonic-mgmt-common/pull/3),
 [registry #214](https://github.com/securely1g/sonic-bazel-registry/pull/214) and
 [registry #216](https://github.com/securely1g/sonic-bazel-registry/pull/216).
-Source CI and the separate consumer use registry main without a temporary
-catalog substitution. The existing immutable archive selection for
-[shared CLI execution tools #72](https://github.com/securely1g/sonic-build-infra/pull/72)
-remains a separate review dependency; this Management Common adoption does not
-change those execution tools.
+Source CI and the separate consumer resolve the published build-infra 0.0.28
+module from registry main. Its foreign runtime supplies GNU patch, xmllint and
+xsltproc for the CLI generators. [Shared CLI execution tools](https://github.com/securely1g/sonic-build-infra/pull/72).
 
 ```sh
 bazel build //dist:runtime //dist:runtime.debug_symbols
@@ -67,10 +65,9 @@ TAR hash; package checks reject temporary build paths in ELF search paths.
 `tools/bazel/check_consumer.py` also builds the public runtime/debug TARs from an
 independent root, composing them with Common data as a Docker consumer does. It
 runs five owner package/generator/installed-service tests and retains their actual
-reports and generated resolution lock. The source test uses explicit local module
-overrides for this checkout and its already-verified infra source; separate registry
-CI validates the published archive and version. Neither test rebuilds the owner
-inside a consumer-owned rule.
+reports and generated resolution lock. The test supplies this Framework checkout
+as the module under test. It also verifies that the independent root resolved the
+same published build-infra module as the source build.
 
 The original REST suite keeps its seven opt-in SSH/TACACS authentication skips;
 those require configured user accounts and are not silently enabled against the
