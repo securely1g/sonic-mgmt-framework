@@ -37,6 +37,13 @@ def verify(runtime, debug, gdb, cli_only=False):
         for archive_path, destination in ((runtime, root / "runtime"), (debug, root / "symbols")):
             with tarfile.open(archive_path) as archive:
                 archive.extractall(destination, filter="data")
+                if archive_path == debug:
+                    for member in archive.getmembers():
+                        if member.isfile():
+                            if member.mode != 0o644:
+                                raise AssertionError(f"Unexpected debug file mode {oct(member.mode)} for {member.name}")
+                            if (member.uid, member.gid) != (0, 0):
+                                raise AssertionError(f"Unexpected debug file ownership {member.uid}:{member.gid} for {member.name}")
         empty = root / "empty"
         empty.mkdir()
         environment = {"PATH": "/usr/bin:/bin", "HOME": str(empty),

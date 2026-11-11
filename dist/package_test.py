@@ -100,6 +100,10 @@ class PackageContractTest(unittest.TestCase):
                     crc = struct.unpack_from("<I", payload, (end + 4) & ~3)[0]
                     self.assertEqual(crc, zlib.crc32(symbols.read_bytes()))
         self.assertEqual(set(debug), expected_symbols)
+        for name, (member, data) in debug.items():
+            self.assertEqual((member.uid, member.gid), (0, 0), name)
+            self.assertIn(member.mtime, (0, 1672560000), name)
+            self.assertEqual(member.mode, 0o644, name)
         print(json.dumps({"runtime_sha256": hashlib.sha256(RUNTIME.read_bytes()).hexdigest(),
             "debug_sha256": hashlib.sha256(DEBUG.read_bytes()).hexdigest(),
             "installed_files_and_links": len(runtime), "matching_elf_pairs": len(binaries),

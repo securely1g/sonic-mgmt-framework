@@ -30,6 +30,8 @@ def main():
     workspace.mkdir(exist_ok=True)
     shutil.copytree(ROOT / "tools/bazel/consumer", workspace, dirs_exist_ok=True)
     shutil.copyfile(ROOT / ".bazelversion", workspace / ".bazelversion")
+    if (ROOT / ".bazelrc").exists():
+        shutil.copyfile(ROOT / ".bazelrc", workspace / ".bazelrc")
     prefix = [*BAZEL, "--output_base=" + str(consumer_base)]
     flags = ["--override_module=sonic-mgmt-framework=" + str(ROOT)]
     # A consumer's stripping policy must not empty the public debug TAR.
@@ -66,8 +68,16 @@ def main():
     artifacts = {}
     for target in TARGETS:
         artifact = workspace / query("cquery", *profile, target, "--output=files")
-        artifacts[target] = {"sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(), "size": artifact.stat().st_size}
+        destination = OUT / artifact.name
+        shutil.copyfile(artifact, destination)
+        artifacts[target] = {
+            "file": destination.name,
+            "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
+            "size": destination.stat().st_size,
+        }
     shutil.copyfile(workspace / "MODULE.bazel.lock", OUT / "MODULE.bazel.lock")
+    consumer_graph = query("mod", "graph", *flags, "--output=json")
+    (OUT / "module-graph.json").write_text(consumer_graph + "\n")
     release = query("info", *flags, "release")
     assert release == "release 8.5.1", release
     def version_query(command, subcommand, *arguments):

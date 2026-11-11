@@ -106,6 +106,8 @@ def main():
         assert counts.get("CcConfigureMakeRule", 0) and counts.get("CliPatchedSource", 0), counts
         (OUT / "source-actions.json").write_text(json.dumps({"action_count": len(graph.get("actions", [])), "mnemonics": counts, "deb_paths": []}, indent=2) + "\n")
     lock = Path("MODULE.bazel.lock")
+    if complete:
+        assert lock.exists(), "Missing required owner MODULE.bazel.lock"
     if lock.exists():
         shutil.copyfile(lock, OUT / lock.name)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
@@ -125,7 +127,14 @@ def main():
         assert downstream["complete"] and downstream["source_revision"] == revision
         assert len(downstream["tests"]) == 5 and downstream["bazel_release"] == "release 8.5.1"
         assert downstream["consumer_compilation_mode"] == "fastbuild" and downstream["consumer_strip"] == "always"
+        for target, data in downstream.get("artifacts", {}).items():
+            destination = OUT / "downstream" / data["file"]
+            assert destination.exists() and destination.stat().st_size == data["size"]
+            assert hashlib.sha256(destination.read_bytes()).hexdigest() == data["sha256"]
+        assert (OUT / "downstream/module-graph.json").exists(), "Missing consumer module-graph.json"
         reports["downstream_consumer"] = downstream
+        owner_graph = command("mod", "graph", "--output=json")
+        (OUT / "module-graph.json").write_text(owner_graph + "\n")
     evidence = {"tested_revision": revision, "tested_parents": parents,
                 "head_sha": head, "base_sha": base, "architecture": os.uname().machine,
                 "complete": complete, "reports": reports, "artifacts": artifacts}
