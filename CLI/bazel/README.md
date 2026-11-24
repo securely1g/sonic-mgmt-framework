@@ -7,11 +7,13 @@ remain available.
 
 The build has separate actions for:
 
-- `//CLI:klish_sources`: unpack the checked-in klish 2.1.4 archive with the
-  registered BSD tar toolchain, apply the existing normal-diff patches with a
-  declared GNU patch, and copy the existing added source files.
-- `//CLI:klish`: build those sources with `rules_foreign_cc.configure_make`, the
-  shared GCC Trixie toolchain and shared declared Autotools runtime.
+- `@framework_klish`: use the shared source-preparation rule to extract the
+  checked-in klish 2.1.4 archive, apply the existing replacement files and
+  unified patches, and expose individual source files.
+- `//CLI:klish`: build those sources with native `cc_library`,
+  `cc_shared_library` and `cc_binary` targets using the GCC Trixie toolchain.
+  The configuration template preserves the original options and the reviewed
+  target-toolchain probe; normal builds do not invoke Autotools or Make.
 - `//CLI:installed_assets`: run the existing platform-feature script, macro
   expansion, pipe insertion and default-command insertion, then validate every
   installed command XML against the existing XSD with declared xmllint.
@@ -27,9 +29,10 @@ compiler prefix maps remove action-directory paths from debugging information.
 
 The CLI selects libxml2, libcurl, Python 3.13 embedding and cJSON development
 inputs from the published build-infra APT set `framework_cli_target_debian`.
-Its shared foreign runtime supplies GNU patch, xmllint and xsltproc for the
-generators in the execution configuration. The isolated build-input tree
-relocates Debian aliases inside the tree and uses UTC during the build.
+Compilation consumes the APT library targets directly through `CcInfo`.
+Declared execution tools supply xmllint and xsltproc for the asset generators.
+The separate installed-runtime test input relocates Debian aliases within its
+declared library tree and uses UTC.
 
 The CLI's runtime Python imports use the root `framework_pip` lock (requests,
 six, natsort and Jinja2); lxml is a generator dependency. A containing image must

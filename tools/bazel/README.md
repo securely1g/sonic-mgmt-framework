@@ -57,10 +57,11 @@ TARs, measures a no-op, independently edits REST source/UI templates/CLI assets,
 and checks that only the corresponding outputs change. Restoring each input
 must reproduce every original hash.
 
-Klish uses libtool's install/relink step before packaging so its library search
-paths name `/usr/sbin/cli/.libs`. A harmless configure-script edit also rebuilds
-the same native sources in a new temporary directory and must preserve every
-TAR hash; package checks reject temporary build paths in ELF search paths.
+Klish uses native C/C++ compilation and shared-library targets over the existing
+SONiC-patched 2.1.4 sources. Configuration is generated from the reviewed template;
+Autotools and Make are not build actions. The existing runtime, static archives
+and matching symbol TARs retain their installation interfaces. Package checks
+reject temporary build paths in installed ELF search paths.
 
 `tools/bazel/check_consumer.py` also builds the public runtime/debug TARs from an
 independent root, composing them with Common data as a Docker consumer does. It
