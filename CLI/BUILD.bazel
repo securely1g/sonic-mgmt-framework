@@ -12,6 +12,15 @@ _AMD64 = [
     "@sonic_build_infra//platforms:trixie",
 ]
 
+_TRIXIE_64 = [
+    "@platforms//os:linux",
+    "@sonic_build_infra//platforms:trixie",
+] + select({
+    "@platforms//cpu:x86_64": [],
+    "@platforms//cpu:aarch64": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
 _LIBRARIES = [
     "libclish",
     "libkonf",
@@ -29,7 +38,7 @@ alias(name = "clish_plugin_clish.so", actual = "@framework_klish//:clish_plugin_
 filegroup(
     name = "klish",
     srcs = [":clish", ":clish_plugin_clish.so"] + [":" + name + suffix for name in _LIBRARIES for suffix in [".so", ".a"]] + [":clish_plugin_clish.a"],
-    target_compatible_with = _AMD64,
+    target_compatible_with = _TRIXIE_64,
 )
 
 # Use the same configuration for installed static archives and deployed ELF
@@ -71,7 +80,7 @@ sonic_deploy_tar(
         "usr/sbin/cli/.libs/" + name + ".a type=file mode=0644 content=$(location :" + name + ".a.debuggable)"
         for name in _LIBRARIES + ["clish_plugin_clish"]
     ],
-    target_compatible_with = _AMD64,
+    target_compatible_with = _TRIXIE_64,
 )
 
 cli_prepare(
@@ -90,7 +99,7 @@ cli_prepare(
         "renderer/templates/*",
     ]),
     source_prefix = "CLI",
-    target_compatible_with = _AMD64,
+    target_compatible_with = _TRIXIE_64,
     tools = "@sonic_build_infra//tools/build_tools:foreign_runtime",
 )
 
@@ -106,14 +115,14 @@ pkg_tar(
     # pkg_tar strips exec-root paths for tree artifacts. Include the repository
     # prefix when these public targets are consumed from another Bazel module.
     strip_prefix = ASSETS_STRIP_PREFIX,
-    target_compatible_with = _AMD64,
+    target_compatible_with = _TRIXIE_64,
 )
 
 pkg_tar(
     name = "runtime",
     mtime = 0,
     portable_mtime = False,
-    target_compatible_with = _AMD64,
+    target_compatible_with = _TRIXIE_64,
     deps = [
         ":assets",
         ":klish_runtime",

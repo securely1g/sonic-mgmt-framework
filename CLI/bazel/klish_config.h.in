@@ -1,4 +1,4 @@
-/* klish 2.1.4 configuration: Linux AMD64, Trixie, libxml2, dynamic plugins.
+/* klish 2.1.4 configuration: Linux AMD64/ARM64, Trixie, libxml2, dynamic plugins.
  * Values follow the original configure options and target-toolchain probe. */
 
 /* Define to 1 if you have the 'chroot' function. */

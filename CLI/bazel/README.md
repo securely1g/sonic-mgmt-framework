@@ -1,4 +1,4 @@
-# Native AMD64 CLI source outputs
+# Native CLI source outputs
 
 `//CLI:runtime` installs the existing Framework CLI under `/usr/sbin/cli`.
 `//CLI:runtime.debug_symbols` contains the matching split debug files. Neither
@@ -64,4 +64,23 @@ The verifier requires a source-line lookup for each binary with the supplied
 debug TAR, and repeats every lookup without it to prove no host symbols satisfy
 the check. Pass `--cli-only` with the CLI runtime/debug TARs to check its six
 ELFs alone. `//dist:package_test` verifies the separate byte/ownership/mode,
-AMD64, build-ID, debuglink CRC and debug-section contracts.
+selected target architecture, build-ID, debuglink CRC and debug-section contracts.
+
+## ARM64 compilation
+
+The native CLI rules accept AMD64 and ARM64 Linux/Trixie target platforms. The
+reviewed target-toolchain probes yield the same configuration macros on both
+architectures, including the LP64 type sizes. Use
+`--platforms=@sonic_build_infra//platforms:aarch64_trixie` for ARM64 output.
+
+The complete CLI also requires the matching ARM64 view of the production
+`framework_cli_target_debian` set. The currently selected Infra .44 lock provides
+that set only for AMD64 and lacks ARM64 curl/cJSON development inputs. These
+producer inputs must be available before the complete ARM64 CLI can build.
+The ARM64 compile CI uses the shared updater to add same-version ARM64 SDK
+requests in an isolated Infra copy, verifies all existing package records are
+unchanged, and passes that validation copy as an explicit module override.
+The normal production lock and package requests are left unchanged.
+CI runs the existing package contract on the AMD64 host with AArch64 as the
+expected ELF machine; this inspects files without executing ARM64 programs.
+The installed CLI runtime test retains its AMD64 loader and platform constraint.

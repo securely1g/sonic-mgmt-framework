@@ -91,3 +91,134 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 1
+
+  arm64:
+    name: Management-framework compile and link (ARM64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    container: debian:trixie-20260918@sha256:9cc080028c43b27d2074d63a5f9caf7166d731494965616c1a6d2827a004585c
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install CI inspection tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends binutils build-essential ca-certificates curl git patch pkg-config python3 tar unzip zstd
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trust the checked-out workspace for validation
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+        with:
+          bazelisk-version: 1.29.0
+          bazelisk-cache: true
+          repository-cache: true
+          disk-cache: management-framework-arm64
+          cache-version: "8.5.1"
+      - name: Use the maintained registry and preserve cache settings
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          source = Path('.bazelrc').read_text()
+          cache_lines = [line for line in (Path.home() / '.bazelrc').read_text().splitlines()
+                         if line.startswith(('build --disk_cache=', 'common --repository_cache='))]
+          assert len(cache_lines) == 2
+          Path('/tmp/framework-ci.bazelrc').write_text(source + '\n' + '\n'.join(cache_lines) + '\n')
+          PYCODE
+          echo 'BAZEL_COMMAND=bazel --nosystem_rc --nohome_rc --noworkspace_rc --bazelrc=/tmp/framework-ci.bazelrc' >> "$GITHUB_ENV"
+          echo "USE_BAZEL_VERSION=$(cat .bazelversion)" >> "$GITHUB_ENV"
+      - name: Prepare an isolated ARM64 validation SDK
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import json
+          import os
+          import shlex
+          import shutil
+          import subprocess
+
+          bazel = shlex.split(os.environ['BAZEL_COMMAND'])
+          lock = subprocess.check_output(bazel + ['cquery', '@sonic_build_infra//apt:apt.lock.json', '--output=files'], text=True).strip()
+          base = Path(subprocess.check_output(bazel + ['info', 'output_base'], text=True).strip())
+          locked_file = Path(lock) if Path(lock).is_absolute() else base / lock
+          assert locked_file.is_file(), locked_file
+          infra = Path('/tmp/framework-arm64-infra')
+          shutil.copytree(locked_file.parent.parent, infra, symlinks=True, copy_function=shutil.copyfile)
+          (infra / 'apt').chmod(0o755)
+          requests = infra / 'apt/requests.json'
+          assert not requests.is_symlink()
+          requests.chmod(0o644)
+          data = json.loads(requests.read_text())
+          sdk = data['dependency_sets']['framework_cli_target_debian']
+          names = {'libxml2-dev', 'libcurl4-openssl-dev', 'libpython3.13-dev', 'libcjson-dev'}
+          # Preserve versions from the existing production SDK declaration.
+          arm = [p.replace('[amd64]', '[arm64]') for p in sdk['packages']
+                 if p.split()[0] in names and p.endswith('[amd64]')]
+          assert {p.split()[0] for p in arm} == names
+          sdk['packages'] += [p for p in arm if p not in sdk['packages']]
+          requests.write_text(json.dumps(data, indent=2) + '\n')
+          Path('/tmp/framework-arm64-original-lock.json').write_bytes(locked_file.read_bytes())
+          # The updater's preparation workspace has its own platform declarations.
+          # Preserve the CI cache paths without importing this root's target platform.
+          cache_lines = [line for line in Path('/tmp/framework-ci.bazelrc').read_text().splitlines()
+                         if line.startswith(('build --disk_cache=', 'common --repository_cache='))]
+          assert len(cache_lines) == 2
+          Path('/tmp/framework-arm64-apt.bazelrc').write_text('\n'.join(cache_lines) + '\n')
+          PYCODE
+          $BAZEL_COMMAND run @sonic_build_infra//apt:lock -- update \
+            --sources /tmp/framework-arm64-infra/apt/sources.json \
+            --requests /tmp/framework-arm64-infra/apt/requests.json \
+            --lock /tmp/framework-arm64-infra/apt/apt.lock.json \
+            --bazel-startup-option=--nosystem_rc \
+            --bazel-startup-option=--nohome_rc \
+            --bazel-startup-option=--noworkspace_rc \
+            --bazel-startup-option=--bazelrc=/tmp/framework-arm64-apt.bazelrc \
+            --work-dir /tmp/framework-arm64-lock-update
+          $BAZEL_COMMAND run @sonic_build_infra//apt:lock -- check \
+            --sources /tmp/framework-arm64-infra/apt/sources.json \
+            --requests /tmp/framework-arm64-infra/apt/requests.json \
+            --lock /tmp/framework-arm64-infra/apt/apt.lock.json
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import hashlib
+          import json
+          old = json.loads(Path('/tmp/framework-arm64-original-lock.json').read_text())
+          path = Path('/tmp/framework-arm64-infra/apt/apt.lock.json')
+          new = json.loads(path.read_text())
+          assert all(new['packages'].get(k) == v for k, v in old['packages'].items())
+          assert new['sources'] == old['sources']
+          assert all(new['dependency_sets'][k] == v for k, v in old['dependency_sets'].items()
+                     if k != 'framework_cli_target_debian')
+          sdk = new['dependency_sets']['framework_cli_target_debian']['sets']
+          assert sdk['amd64'] == old['dependency_sets']['framework_cli_target_debian']['sets']['amd64']
+          assert 'arm64' in sdk
+          print(json.dumps({'validation_lock_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                            'unchanged_packages': len(old['packages']),
+                            'added_packages': len(new['packages']) - len(old['packages'])}))
+          PYCODE
+      - name: Compile and link ARM64 source and TARs
+        run: |
+          $BAZEL_COMMAND build \
+            --platforms=@sonic_build_infra//platforms:aarch64_trixie \
+            --host_platform=@sonic_build_infra//platforms:x86_64_trixie \
+            --override_module=sonic-build-infra=/tmp/framework-arm64-infra \
+            //CLI:klish //dist:runtime //dist:runtime.debug_symbols \
+            //models:ui //CLI:installed_assets \
+            @sonic_build_infra//toolchains/binutils:readelf \
+            @sonic_build_infra//toolchains/binutils:objcopy
+      - name: Inspect ARM64 package layout, ELF headers and debug pairs
+        run: |
+          output() {
+            $BAZEL_COMMAND cquery "$1" \
+              --platforms=@sonic_build_infra//platforms:aarch64_trixie \
+              --host_platform=@sonic_build_infra//platforms:x86_64_trixie \
+              --override_module=sonic-build-infra=/tmp/framework-arm64-infra \
+              --output=files
+          }
+          python3 dist/package_test.py \
+            "$(output //dist:runtime)" "$(output //dist:runtime.debug_symbols)" \
+            "$(output //models:ui)" "$(output //CLI:installed_assets)" \
+            "$(output @sonic_build_infra//toolchains/binutils:readelf)" \
+            "$(output @sonic_build_infra//toolchains/binutils:objcopy)" aarch64
