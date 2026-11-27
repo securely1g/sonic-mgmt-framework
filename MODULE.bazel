@@ -12,7 +12,7 @@ bazel_dep(name = "gazelle", version = "0.54.0.sonic.2")
 bazel_dep(name = "openconfig_goyang", version = "0.0.0.sonic.2-20200309174518-a00bece872fc", repo_name = "com_github_openconfig_goyang")
 bazel_dep(name = "openconfig_ygot", version = "0.7.1.sonic.2", repo_name = "com_github_openconfig_ygot")
 bazel_dep(name = "rules_go", version = "0.65.0.sonic.2", repo_name = "io_bazel_rules_go")
-bazel_dep(name = "sonic-build-infra", version = "0.0.44-35726399908a3beb947174e9359f902077928289", repo_name = "sonic_build_infra")
+bazel_dep(name = "sonic-build-infra", version = "0.0.45-77ef625a4ddafc8cdc15f3cc6aee31eabac8a5de", repo_name = "sonic_build_infra")
 
 single_version_override(
     module_name = "rules_go",
@@ -24,8 +24,17 @@ single_version_override(
     version = "0.10.5.sonic.2",
 )
 
+# Only the standalone Framework build selects the workspace's Go replacements.
+# Buildimage and other consumers own their own Go workspace.
+bazel_dep(name = "framework_owner_go_workspace", dev_dependency = True)
+local_path_override(
+    module_name = "framework_owner_go_workspace",
+    path = "tools/bazel/owner_go_workspace",
+)
+
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
-go_deps.from_file(go_work = "//:go.bazel.work")
+# A consuming root owns its Go workspace. Contribute the Framework module dependencies.
+go_deps.from_file(go_mod = "//:go.mod")
 
 # Root-only patch selection, matching the management-common owner.
 go_patches = use_extension("@gazelle//:extensions.bzl", "go_deps", dev_dependency = True)
@@ -74,7 +83,6 @@ go_sdk.download(version = "1.25.9")
 
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "rules_foreign_cc", version = "0.16.0.sonic.2")
 bazel_dep(name = "rules_distroless", version = "0.9.4.sonic.26")
 bazel_dep(name = "tar.bzl", version = "0.10.5.sonic.2")
 
@@ -105,3 +113,100 @@ apt.import_lock(lock = "@sonic_build_infra//apt:apt.lock.json")
 use_repo(apt, "framework_cli_target_debian")
 
 bazel_dep(name = "rules_cc", version = "0.2.22")
+
+# The SONiC-patched klish source is exposed as files for native C/C++ rules.
+prepared_source = use_repo_rule("@sonic_build_infra//source:prepared_source.bzl", "prepared_source")
+
+# Preserve the Make recipe's patch order. Normal diffs get their destination
+# from their filenames; the other four patches carry unified file headers.
+klish_patches = [
+    "bin/clish.c.diff",
+    "clish/command/command.c.diff",
+    "clish/command/private.h.diff",
+    "clish/command.h.diff",
+    "clish/nspace.h.diff",
+    "clish/param/module.am.diff",
+    "clish/param/param.c.diff",
+    "clish/param/paramv.c.diff",
+    "clish/param/private.h.diff",
+    "clish/param.h.diff",
+    "clish/pargv.h.diff",
+    "clish/plugin/module.am.diff",
+    "clish/ptype/private.h.diff",
+    "clish/ptype/ptype.c.diff",
+    "clish/ptype.h.diff",
+    "clish/shell/private.h.diff",
+    "clish/shell/shell_command.c.diff",
+    "clish/shell/shell_execute.c.diff",
+    "clish/shell/shell_help.c.diff",
+    "clish/shell/shell_libxml2.c.diff",
+    "clish/shell/shell_new.c.diff",
+    "clish/shell/shell_parse.c.diff",
+    "clish/shell/shell_ptype.c.diff",
+    "clish/shell/shell_tinyrl.c.diff",
+    "clish/shell/shell_wdog.c.diff",
+    "clish/shell/shell_xml.c.diff",
+    "clish/shell.h.diff",
+    "configure.ac.diff",
+    "lub/argv/argv.c.diff",
+    "lub/argv.h.diff",
+    "lub/string/string.c.diff",
+    "lub/string.h.diff",
+    "plugins/clish/builtin_init.c.diff",
+    "plugins/clish/hook_log.c.diff",
+    "plugins/clish/module.am.diff",
+    "plugins/clish/private.h.diff",
+    "plugins/clish/sym_script.c.diff",
+    "tinyrl/history/history.c.diff",
+    "tinyrl/tinyrl.c.diff",
+    "tinyrl/tinyrl.h.diff",
+]
+
+klish_patch_inputs = use_repo_rule("//CLI/bazel:klish_patches.bzl", "klish_patch_inputs")
+klish_patch_inputs(
+    name = "framework_klish_patches",
+    patches = {path: "//CLI:klish/patches/klish-2.1.4/" + path for path in klish_patches},
+)
+
+patch_tools_repository = use_repo_rule("@sonic_build_infra//source:patch_tools.bzl", "patch_tools_repository")
+patch_tools_repository(name = "framework_patch_tools", lock = "@sonic_build_infra//apt:apt.lock.json")
+
+prepared_source(
+    name = "framework_klish",
+    build_file = "//CLI/bazel:klish.BUILD.bazel",
+    gnu_tools = "@framework_patch_tools//:ROOT",
+    inputs = {path: "@framework_klish_patches//:" + path for path in klish_patches} | {
+        "archive": "//CLI:klish/klish-2.1.4.tgz",
+        "configure_klish.sh": "//CLI/bazel:configure_klish.sh",
+        "clish/param/mgmt_clish_extn_param.c": "//CLI:klish/patches/klish-2.1.4/clish/param/mgmt_clish_extn_param.c",
+        "clish/plugin/clish_api.h": "//CLI:klish/patches/klish-2.1.4/clish/plugin/clish_api.h",
+        "clish/plugin/mgmt_clish_utils.c": "//CLI:klish/patches/klish-2.1.4/clish/plugin/mgmt_clish_utils.c",
+        "clish/plugin/mgmt_clish_utils.h": "//CLI:klish/patches/klish-2.1.4/clish/plugin/mgmt_clish_utils.h",
+        "mgmt_clish_extn_param.h": "//CLI:klish/patches/klish-2.1.4/mgmt_clish_extn_param.h",
+        "plugins/clish/call_pyobj.c": "//CLI:klish/patches/klish-2.1.4/plugins/clish/call_pyobj.c",
+        "plugins/clish/logging.h": "//CLI:klish/patches/klish-2.1.4/plugins/clish/logging.h",
+        "plugins/clish/nos_extn.c": "//CLI:klish/patches/klish-2.1.4/plugins/clish/nos_extn.c",
+        "plugins/clish/nos_extn.h": "//CLI:klish/patches/klish-2.1.4/plugins/clish/nos_extn.h",
+        "plugins/clish/rest_cl.cpp": "//CLI:klish/patches/klish-2.1.4/plugins/clish/rest_cl.cpp",
+        "plugins/clish/rest_tls.h": "//CLI:klish/patches/klish-2.1.4/plugins/clish/rest_tls.h",
+    },
+    steps = [
+        "{\"op\":\"extract\",\"archive_input\":\"archive\",\"strip_prefix\":\"klish-2.1.4\"}",
+        "{\"op\":\"file\",\"input\":\"clish/param/mgmt_clish_extn_param.c\",\"path\":\"clish/param/mgmt_clish_extn_param.c\"}",
+        "{\"op\":\"file\",\"input\":\"clish/plugin/clish_api.h\",\"path\":\"clish/plugin/clish_api.h\"}",
+        "{\"op\":\"file\",\"input\":\"clish/plugin/mgmt_clish_utils.c\",\"path\":\"clish/plugin/mgmt_clish_utils.c\"}",
+        "{\"op\":\"file\",\"input\":\"clish/plugin/mgmt_clish_utils.h\",\"path\":\"clish/plugin/mgmt_clish_utils.h\"}",
+        "{\"op\":\"file\",\"input\":\"mgmt_clish_extn_param.h\",\"path\":\"mgmt_clish_extn_param.h\"}",
+        "{\"op\":\"file\",\"input\":\"plugins/clish/call_pyobj.c\",\"path\":\"plugins/clish/call_pyobj.c\"}",
+        "{\"op\":\"file\",\"input\":\"plugins/clish/logging.h\",\"path\":\"plugins/clish/logging.h\"}",
+        "{\"op\":\"file\",\"input\":\"plugins/clish/nos_extn.c\",\"path\":\"plugins/clish/nos_extn.c\"}",
+        "{\"op\":\"file\",\"input\":\"plugins/clish/nos_extn.h\",\"path\":\"plugins/clish/nos_extn.h\"}",
+        "{\"op\":\"file\",\"input\":\"plugins/clish/rest_cl.cpp\",\"path\":\"plugins/clish/rest_cl.cpp\"}",
+        "{\"op\":\"file\",\"input\":\"plugins/clish/rest_tls.h\",\"path\":\"plugins/clish/rest_tls.h\"}",
+    ] + [
+        '{"op":"patch","input":"%s","strip":1,"format":"gnu"}' % path
+        for path in klish_patches
+    ] + [
+        '{"op":"file","input":"configure_klish.sh","path":"configure_klish.sh"}',
+    ],
+)
