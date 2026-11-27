@@ -1,0 +1,5 @@
+module(name = "framework_owner_go_workspace")
+
+bazel_dep(name = "gazelle", version = "0.54.0.sonic.2")
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_work = "@@//:go.bazel.work")
